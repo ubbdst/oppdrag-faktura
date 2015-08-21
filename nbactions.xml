@@ -10,7 +10,7 @@
                 <goal>org.codehaus.mojo:exec-maven-plugin:1.2.1:exec</goal>
             </goals>
             <properties>
-                <exec.args>-classpath %classpath com.ubb.webscraping.UserProfileMain</exec.args>
+                <exec.args>-classpath %classpath no.uib.ub.oppdrag.invoice.HttpGetInvoices</exec.args>
                 <exec.executable>java</exec.executable>
             </properties>
         </action>

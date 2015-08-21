@@ -48,6 +48,8 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.unit.TimeValue;
 import no.uib.ub.oppdrag.settings.InvoiceSettings;
+import org.elasticsearch.common.xcontent.XContentBuilder;
+import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 
 
 public class HttpGetInvoices {
@@ -162,12 +164,26 @@ public class HttpGetInvoices {
                         JSONArray customerObjects = JsonPath.read(doc, "$..custom_fields[?(@.name=='Navn')]");
                         JSONArray customerNames = JsonPath.read(customerObjects, "$.[*].value");
                         
-                        /**
+                        
+                        //Build a JSON object using Elasticsearch helpers
+                        XContentBuilder jsonObject = jsonBuilder()
+                                .startObject()
+                                    .field("id" , invoiceURI)
+                                    .field("order_number" , orderNumber)
+                                    .field("invoice_date" , invoiceDate)
+                                    .field("status" , invoiceStatus)
+                                    .field("assigned_to" , assignedTo)
+                                    .field("invoice_line", invoiceLines)
+                                    .field("customer_name", customerNames)
+                                .endObject();
+                                       
+                        
                          bulk.add(new IndexRequest(InvoiceSettings.INDEX_NAME , InvoiceSettings.INDEX_TYPE, invoiceURI)
-                                .source(responseBody));
-                        **/ 
+                                .source(jsonObject.string()));
+                        
 
-                        System.out.println(invoiceURI + " " + customerNames.toString() + "  " + orderNumber + " ");
+                        //System.out.println(invoiceURI + " " + customerNames.toString() + "  " + orderNumber + " ");
+                        //System.out.println(jsonObject.string());
                      }
 
                  } 
