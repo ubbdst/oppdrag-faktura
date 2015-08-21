@@ -11,6 +11,12 @@
         <maven.compiler.source>1.7</maven.compiler.source>
         <maven.compiler.target>1.7</maven.compiler.target>
     </properties>
+    <developers>
+		<developer>
+			<name>Hemed Ali Al Ruwehy</name>
+			<email>hemed.ruwehy@uib.no</email>
+		</developer>
+    </developers>
     <dependencies>
          <dependency>
             <groupId>com.google.code.gson</groupId>
@@ -55,7 +61,7 @@
                 <archive>
                   <manifest>
                        <addClasspath>true</addClasspath>
-                       <mainClass>com.ubb.webscraping.UserProfileMain</mainClass>
+                       <mainClass>no.uib.ub.oppdrag.invoice.HttpGetInvoices</mainClass>
                   </manifest>
                 </archive>
               <outputDirectory>${project.build.directory}</outputDirectory>
