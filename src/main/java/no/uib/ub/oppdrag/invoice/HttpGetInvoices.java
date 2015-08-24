@@ -15,6 +15,7 @@ package no.uib.ub.oppdrag.invoice;
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.InvalidJsonException;
 import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.PathNotFoundException;
 import java.io.IOException;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
@@ -171,6 +172,8 @@ public class HttpGetInvoices {
                         JSONArray customerObjects = JsonPath.read(doc, "$..custom_fields[?(@.name=='Navn')]");
                         JSONArray customerNames = JsonPath.read(customerObjects, "$.[*].value");
                         
+               
+                        
                         
                         //Build a JSON object using Elasticsearch helpers
                         XContentBuilder jsonObject = jsonBuilder()
@@ -199,8 +202,9 @@ public class HttpGetInvoices {
                    KeyStoreException | 
                    KeyManagementException | 
                    IOException | 
+                   PathNotFoundException |
                    InvalidJsonException ex){
-               logger.log(Level.SEVERE , "Exception occured {0}", ex.getStackTrace());
+               logger.log(Level.SEVERE , "Exception {0}", ex.getLocalizedMessage());
            }
           
            finally {
@@ -228,7 +232,7 @@ public class HttpGetInvoices {
             Set<Integer> invoiceIds = new HashSet<>();
             boolean proceed = true;
             try{  
-                  logger.log(Level.INFO , String.format("Starting harvesting from [%s] with key [%s]" , url , apiKey));
+                  logger.log(Level.INFO , String.format("Starting harvesting from URI [%s?key=%s]" , url , apiKey));
                   for(int page = 1; proceed; page++){ 
                        String urlWithApiKey =  url 
                                             + "?key=" + apiKey
