@@ -53,6 +53,7 @@ import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.unit.TimeValue;
 import no.uib.ub.oppdrag.settings.InvoiceSettings;
 import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 
@@ -120,9 +121,13 @@ public class HttpGetInvoices {
                   //Establish HTTP Transport client to join the Elasticsearch cluster
                   elasticsearchClient = new TransportClient(ImmutableSettings.settingsBuilder()
                           .put(
-                                  "cluster.name" , "elasticsearch").build())
+                                  "cluster.name" , InvoiceSettings.CLUSTER_NAME).build())
                           .addTransportAddress(
                                   new InetSocketTransportAddress("127.0.0.1" , 9300));
+                  
+                  
+                   ClusterHealthResponse hr = elasticsearchClient.admin().cluster().prepareHealth().get();
+                   logger.log(Level.INFO, "Joining a cluster with settings: {0}", hr.toString());
                   
                    //Create a bulk processor in order to index JSON documents in bulk.
                     BulkProcessor bulk = BulkProcessor.builder(elasticsearchClient, new BulkProcessor.Listener() {
@@ -196,7 +201,10 @@ public class HttpGetInvoices {
                      }
                  } 
            catch(ElasticsearchException esEx){
-            logger.log(Level.SEVERE , "Unable to load cluster settings: {0}", esEx.getLocalizedMessage());
+            logger.log(Level.SEVERE , 
+                    String.format(
+                            "Exception [%s]. Nothing was indexed. Please make sure Elasticsearch is running with cluster.name=[%s]" 
+                             , esEx.getLocalizedMessage(), InvoiceSettings.CLUSTER_NAME ));
              }
            catch(NoSuchAlgorithmException | 
                    KeyStoreException | 
