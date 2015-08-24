@@ -13,8 +13,12 @@
 package no.uib.ub.oppdrag.invoice;
 
 import com.jayway.jsonpath.Configuration;
+import com.jayway.jsonpath.InvalidJsonException;
 import com.jayway.jsonpath.JsonPath;
 import java.io.IOException;
+import java.security.KeyManagementException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.HashSet;
@@ -44,41 +48,36 @@ import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.ImmutableSettings;
-import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.unit.TimeValue;
 import no.uib.ub.oppdrag.settings.InvoiceSettings;
+import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 
 
 public class HttpGetInvoices {
+    static final Logger logger = Logger.getLogger(HttpGetInvoices.class.getName());
     
     public final static void main(String[] args) throws Exception {
-        CloseableHttpClient httpClient = HttpClients.createDefault();   
-        
-       //Create cluster settings for Elasticsearch
-        Settings clusterSettings = ImmutableSettings.settingsBuilder()
-                .put("cluster.name" , "elasticsearch").build();
+        CloseableHttpClient httpClient = HttpClients.createDefault();
+        long bulkLength = 0;
+        long startTime = System.currentTimeMillis();
 
-       //Establish HTTP Transport client to join the Elasticsearch cluster
-        Client elasticsearchClient = new TransportClient(clusterSettings)
-               .addTransportAddress(new InetSocketTransportAddress("127.0.0.1" , 9300));
+        Client elasticsearchClient = null;
 
         //Get Redmine API Key from a user
         String redmineApiKey = System.getProperty("apiKey");
         
         if(redmineApiKey == null){
-            Logger.getLogger(HttpGetInvoices.class.getName())
-                    .log(Level.INFO,
+            logger.log(Level.INFO,
                           "Input parameter \"apiKey\" was not found. Using default API-key for authentication.");
             redmineApiKey = InvoiceSettings.DEFAULT_API_KEY;
         }
        else{
-           Logger.getLogger(HttpGetInvoices.class.getName())
-                   .log(Level.INFO,
-                           "Using \"apiKey\" %s% for authentication" , redmineApiKey);
-        }
+           logger.log(Level.INFO,
+                           "Using apiKey \"{0}\" for authentication" , redmineApiKey);
+         }
         
            try{
                   /*Trust any of the SSL certificate.
@@ -110,13 +109,21 @@ public class HttpGetInvoices {
                                 HttpEntity entity = response.getEntity();
                                 return entity != null ? EntityUtils.toString(entity) : null;
                             } else {
-                                throw new ClientProtocolException(status + ": " + response.getStatusLine().getReasonPhrase());
+                                throw new ClientProtocolException(
+                                        status + ": " + response.getStatusLine().getReasonPhrase());
                             }
                         }
 
                     };
-
-                   //Instantiate a bulk processor in order to index JSON documents in bulk.
+                   
+                  //Establish HTTP Transport client to join the Elasticsearch cluster
+                  elasticsearchClient = new TransportClient(ImmutableSettings.settingsBuilder()
+                          .put(
+                                  "cluster.name" , "elasticsearch").build())
+                          .addTransportAddress(
+                                  new InetSocketTransportAddress("127.0.0.1" , 9300));
+                  
+                   //Create a bulk processor in order to index JSON documents in bulk.
                     BulkProcessor bulk = BulkProcessor.builder(elasticsearchClient, new BulkProcessor.Listener() {
 
                         @Override
@@ -180,20 +187,38 @@ public class HttpGetInvoices {
                         
                          bulk.add(new IndexRequest(InvoiceSettings.INDEX_NAME , InvoiceSettings.INDEX_TYPE, invoiceURI)
                                 .source(jsonObject.string()));
-                        
+                        bulkLength++;
 
-                        //System.out.println(invoiceURI + " " + customerNames.toString() + "  " + orderNumber + " ");
                         //System.out.println(jsonObject.string());
                      }
-
                  } 
-          finally {
-            httpClient.close();
-            elasticsearchClient.close();
+           catch(ElasticsearchException esEx){
+            logger.log(Level.SEVERE , "Unable to load cluster settings: {0}", esEx.getLocalizedMessage());
+             }
+           catch(NoSuchAlgorithmException | 
+                   KeyStoreException | 
+                   KeyManagementException | 
+                   IOException | 
+                   InvalidJsonException ex){
+               logger.log(Level.SEVERE , "Exception occured {0}", ex.getStackTrace());
+           }
+          
+           finally {
+               
+            logger.log(Level.INFO , "\n==========================================="
+                  + "\n\tTotal documents indexed: {0}" 
+                  + "\n\tIndex: " + InvoiceSettings.INDEX_NAME 
+                  + "\n\tType: "  + InvoiceSettings.INDEX_TYPE 
+                  + "\n\tTime taken: {1} seconds"
+                  +"\n===========================================", 
+                  new Object[]{bulkLength, (System.currentTimeMillis() - startTime)/1000.0});
+                
+             httpClient.close();
+             if(elasticsearchClient != null) elasticsearchClient.close();
        }    
       }
 
-         //Get all invoice Ids
+         /**Get all invoice Ids **/
           private static Set<Integer> getAllInvoiceIds(
                   String url,
                   String apiKey, 
@@ -202,7 +227,8 @@ public class HttpGetInvoices {
           {
             Set<Integer> invoiceIds = new HashSet<>();
             boolean proceed = true;
-            try{
+            try{  
+                  logger.log(Level.INFO , String.format("Starting harvesting from [%s] with key [%s]" , url , apiKey));
                   for(int page = 1; proceed; page++){ 
                        String urlWithApiKey =  url 
                                             + "?key=" + apiKey
@@ -216,7 +242,8 @@ public class HttpGetInvoices {
                        if(listOfInvoiceIds.isEmpty()){proceed = false;}
                     }
             }
-            catch(IOException ex){ex.getLocalizedMessage();}
+            catch(IOException ex){
+                logger.log(Level.SEVERE , "Exception occured during harvesting [{0}]", ex.getLocalizedMessage());}
             return invoiceIds;
           }
  }
