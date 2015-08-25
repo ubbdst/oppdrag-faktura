@@ -50,10 +50,11 @@ import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
-import org.elasticsearch.common.unit.TimeValue;
 import no.uib.ub.oppdrag.settings.InvoiceSettings;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
+import org.elasticsearch.action.bulk.BulkItemResponse;
+import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 
@@ -133,20 +134,33 @@ public class HttpGetInvoices {
                     BulkProcessor bulk = BulkProcessor.builder(elasticsearchClient, new BulkProcessor.Listener() {
 
                         @Override
-                        public void beforeBulk(long executionId, BulkRequest request) {}
+                        public void beforeBulk(long executionId, BulkRequest request) {
+                            logger.log(Level.INFO, "Going to execute new bulk composed of {0} actions", request.numberOfActions());
+                        }
 
                         @Override
-                        public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {}
+                        public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {
+                            logger.log(Level.INFO, "Executed bulk composed of {0} actions", request.numberOfActions());
+                            if (response.hasFailures()) {
+                                logger.log(Level.WARNING, "There was failures while executing bulk {0}", response.buildFailureMessage());
+                                    for (BulkItemResponse item : response.getItems()) {
+                                        if (item.isFailed()) {
+                                            logger.log(Level.WARNING , String.format("Error for %s %s %s for %s operation: %s " , item.getIndex(),
+                                                    item.getType(), item.getId(), item.getOpType(), item.getFailureMessage()));
+                                        }
+                                    }
+                             }
+                        }
 
                         @Override
                         public void afterBulk(long executionId, BulkRequest request, Throwable thr) {
-
+                          logger.log(Level.WARNING, "Exception occured [{0}]" , thr);
                          }
                       })
                          .setBulkActions(50)
-                         .setFlushInterval(TimeValue.timeValueSeconds(5))
+                         .setFlushInterval(TimeValue.timeValueMillis(100))
                          .build();
-
+                          
                      //Get all invoice ids
                      Set<Integer> invoiceIds = getAllInvoiceIds(
                              InvoiceSettings.INVOICE_BASE_URI + InvoiceSettings.JSON_FILE_EXTENSION,
@@ -194,7 +208,7 @@ public class HttpGetInvoices {
                                 .source(jsonObject.string()));
                         bulkLength++;
 
-                        //System.out.println(jsonObject.string());
+                        System.out.println(bulkLength +" "+ jsonObject.string());
                      }
                  } 
            catch(ElasticsearchException esEx){
