@@ -111,7 +111,7 @@ public class HttpGetInvoices {
                                 HttpEntity entity = response.getEntity();
                                 return entity != null ? EntityUtils.toString(entity) : null;
                             } else {
-                                throw new ClientProtocolException(
+                                throw new ClientProtocolException("The request could not be processed. " +
                                         status + ": " + response.getStatusLine().getReasonPhrase());
                             }
                         }
@@ -120,14 +120,14 @@ public class HttpGetInvoices {
                    
                   //Establish HTTP Transport client to join the Elasticsearch cluster
                   elasticsearchClient = new TransportClient(ImmutableSettings.settingsBuilder()
-                          .put(
-                                  "cluster.name" , InvoiceSettings.CLUSTER_NAME).build())
+                          .put("cluster.name",InvoiceSettings.CLUSTER_NAME).build())
                           .addTransportAddress(
                                   new InetSocketTransportAddress("127.0.0.1" , 9300));
                   
                   
                    ClusterHealthResponse hr = elasticsearchClient.admin().cluster().prepareHealth().get();
                    logger.log(Level.INFO, "Joining a cluster with settings: {0}", hr.toString());
+                   
                   
                    //Create a bulk processor in order to index JSON documents in bulk.
                     BulkProcessor bulk = BulkProcessor.builder(elasticsearchClient, new BulkProcessor.Listener() {
@@ -167,7 +167,7 @@ public class HttpGetInvoices {
                         Object doc = Configuration.defaultConfiguration().jsonProvider().parse(responseBody);
                         
                         
-                        //TO DO: Create a method to build a JSON object here.
+                        //TO DO: Parse JSON strings using JsonPath
                         String invoiceURI = InvoiceSettings.INVOICE_BASE_URI + "/" + invoiceId;
                         String orderNumber = JsonPath.read(doc, "$.invoice.number");
                         String invoiceDate = JsonPath.read(doc, "$.invoice.invoice_date");
@@ -176,10 +176,7 @@ public class HttpGetInvoices {
                         JSONArray invoiceLines = JsonPath.read(doc,"$.invoice.lines[*].description");
                         JSONArray customerObjects = JsonPath.read(doc, "$..custom_fields[?(@.name=='Navn')]");
                         JSONArray customerNames = JsonPath.read(customerObjects, "$.[*].value");
-                        
-               
-                        
-                        
+    
                         //Build a JSON object using Elasticsearch helpers
                         XContentBuilder jsonObject = jsonBuilder()
                                 .startObject()
@@ -192,7 +189,7 @@ public class HttpGetInvoices {
                                     .field("customer_name", customerNames)
                                 .endObject();
                                        
-                        
+                         //Index documents 
                          bulk.add(new IndexRequest(InvoiceSettings.INDEX_NAME , InvoiceSettings.INDEX_TYPE, invoiceURI)
                                 .source(jsonObject.string()));
                         bulkLength++;
@@ -203,7 +200,7 @@ public class HttpGetInvoices {
            catch(ElasticsearchException esEx){
             logger.log(Level.SEVERE , 
                     String.format(
-                            "Exception [%s]. Nothing was indexed. Please make sure Elasticsearch is running with cluster.name=[%s]" 
+                            "Exception [%s]. Please make sure Elasticsearch is configured with same settings." 
                              , esEx.getLocalizedMessage(), InvoiceSettings.CLUSTER_NAME ));
              }
            catch(NoSuchAlgorithmException | 
@@ -217,13 +214,14 @@ public class HttpGetInvoices {
           
            finally {
                
-            logger.log(Level.INFO , "\n==========================================="
-                  + "\n\tTotal documents indexed: {0}" 
-                  + "\n\tIndex: " + InvoiceSettings.INDEX_NAME 
-                  + "\n\tType: "  + InvoiceSettings.INDEX_TYPE 
-                  + "\n\tTime taken: {1} seconds"
-                  +"\n===========================================", 
-                  new Object[]{bulkLength, (System.currentTimeMillis() - startTime)/1000.0});
+            logger.log(Level.INFO , String.format("\n==========================================="
+                  + "\n\tTotal documents indexed: %s" 
+                  + "\n\tIndex: %s"  
+                  + "\n\tType: %s"    
+                  + "\n\tTime taken: %s seconds"
+                  +"\n===========================================",
+                  bulkLength,InvoiceSettings.INDEX_NAME,InvoiceSettings.INDEX_TYPE, 
+                 (System.currentTimeMillis()-startTime)/1000.0));
                 
              httpClient.close();
              if(elasticsearchClient != null) elasticsearchClient.close();
@@ -254,8 +252,9 @@ public class HttpGetInvoices {
                        if(listOfInvoiceIds.isEmpty()){proceed = false;}
                     }
             }
-            catch(IOException ex){
-                logger.log(Level.SEVERE , "Exception occured during harvesting [{0}]", ex.getLocalizedMessage());}
+            catch(IOException | PathNotFoundException ex){
+                logger.log(Level.SEVERE , "Exception occured during harvesting [{0}]", ex.getLocalizedMessage());
+            }
             return invoiceIds;
           }
  }
