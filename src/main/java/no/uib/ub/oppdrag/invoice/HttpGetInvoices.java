@@ -3,12 +3,10 @@
  invoices from Redmine CRM through HTTP and
  index them to Elasticsearch. <br>
 
- @author Hemed Ali 
+ @author Hemed Ali AlRuwehy 
  @since 17-08-2015
  Location : The University of Bergen.
 */
-
-
 
 package no.uib.ub.oppdrag.invoice;
 
@@ -54,23 +52,20 @@ import no.uib.ub.oppdrag.settings.InvoiceSettings;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
 import org.elasticsearch.action.bulk.BulkItemResponse;
-import org.elasticsearch.action.count.CountResponse;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
-import static org.elasticsearch.index.query.QueryBuilders.termQuery;
 
 
 public class HttpGetInvoices {
     static final Logger logger = Logger.getLogger(HttpGetInvoices.class.getName());
+    static long bulkLength = 0;
     
     public final static void main(String[] args) throws Exception {
         CloseableHttpClient httpClient = HttpClients.createDefault();
-        long totalDocumentsIndexed = 0;
         long startTime = System.currentTimeMillis();
         Client elasticsearchClient = null;
         BulkProcessor bulkProcessor = null;
-        CountResponse countResponse = null; 
         
         //Get Redmine API Key from a user
         String redmineApiKey = System.getProperty("apiKey");
@@ -157,7 +152,7 @@ public class HttpGetInvoices {
 
                         @Override
                         public void afterBulk(long executionId, BulkRequest request, Throwable thr) {
-                          logger.log(Level.WARNING, "Exception occured [{0}]" , thr.getLocalizedMessage());
+                          logger.log(Level.WARNING, "Exception occured during bulk processing [{0}]" , thr.getLocalizedMessage());
                          }
                       })
                          .setBulkActions(100)
@@ -210,7 +205,7 @@ public class HttpGetInvoices {
                         IndexRequest indexRequest = new IndexRequest(InvoiceSettings.INDEX_NAME , InvoiceSettings.INDEX_TYPE, invoiceURI)
                                                .source(jsonObject.string());
                         bulkProcessor.add(indexRequest);
-                        
+                        bulkLength++;
                         //System.out.println(bulkLength +" "+ jsonObject.string());
                      }
                  } 
@@ -226,7 +221,7 @@ public class HttpGetInvoices {
                    IOException | 
                    PathNotFoundException |
                    InvalidJsonException ex){
-               logger.log(Level.SEVERE , "Exception {0}", ex.getLocalizedMessage());
+               logger.log(Level.SEVERE , "Exception [{0}]", ex.getLocalizedMessage());
            }
           
            finally {
@@ -236,24 +231,18 @@ public class HttpGetInvoices {
                  bulkProcessor.flush();
                  bulkProcessor.close();
              }
-             
-             if(elasticsearchClient != null){
-                 //Get a total count of indexed documents
-                 countResponse = elasticsearchClient.prepareCount(InvoiceSettings.INDEX_NAME)
-                         .setQuery(termQuery("_type", InvoiceSettings.INDEX_TYPE))
-                         .execute()
-                         .actionGet();
-                 totalDocumentsIndexed = countResponse.getCount();
+             /**
+              if(elasticsearchClient != null){
                  elasticsearchClient.close();
-             }
-               
+              }
+             **/
             logger.log(Level.INFO , String.format("\n==========================================="
-                  + "\n\tTotal documents indexed: %s" 
+                  + "\n\tTotal documents processed: %s" 
                   + "\n\tIndex: %s"  
                   + "\n\tType: %s"    
                   + "\n\tTime taken: %s seconds"
                   +"\n===========================================",
-                  totalDocumentsIndexed, 
+                  bulkLength, 
                   InvoiceSettings.INDEX_NAME,
                   InvoiceSettings.INDEX_TYPE, 
                  (System.currentTimeMillis()-startTime)/1000.0));
