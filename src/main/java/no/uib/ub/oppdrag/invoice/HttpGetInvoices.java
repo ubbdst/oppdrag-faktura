@@ -54,9 +54,11 @@ import no.uib.ub.oppdrag.settings.InvoiceSettings;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
 import org.elasticsearch.action.bulk.BulkItemResponse;
+import org.elasticsearch.action.count.CountResponse;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
+import static org.elasticsearch.index.query.QueryBuilders.termQuery;
 
 
 public class HttpGetInvoices {
@@ -64,11 +66,12 @@ public class HttpGetInvoices {
     
     public final static void main(String[] args) throws Exception {
         CloseableHttpClient httpClient = HttpClients.createDefault();
-        long bulkLength = 0;
+        long totalDocumentsIndexed = 0;
         long startTime = System.currentTimeMillis();
-
         Client elasticsearchClient = null;
-
+        BulkProcessor bulkProcessor = null;
+        CountResponse countResponse = null; 
+        
         //Get Redmine API Key from a user
         String redmineApiKey = System.getProperty("apiKey");
         
@@ -131,7 +134,7 @@ public class HttpGetInvoices {
                    
                   
                    //Create a bulk processor in order to index JSON documents in bulk.
-                    BulkProcessor bulk = BulkProcessor.builder(elasticsearchClient, new BulkProcessor.Listener() {
+                     bulkProcessor = BulkProcessor.builder(elasticsearchClient, new BulkProcessor.Listener() {
 
                         @Override
                         public void beforeBulk(long executionId, BulkRequest request) {
@@ -154,11 +157,11 @@ public class HttpGetInvoices {
 
                         @Override
                         public void afterBulk(long executionId, BulkRequest request, Throwable thr) {
-                          logger.log(Level.WARNING, "Exception occured [{0}]" , thr);
+                          logger.log(Level.WARNING, "Exception occured [{0}]" , thr.getLocalizedMessage());
                          }
                       })
-                         .setBulkActions(50)
-                         .setFlushInterval(TimeValue.timeValueMillis(100))
+                         .setBulkActions(100)
+                         .setFlushInterval(TimeValue.timeValueSeconds(5))
                          .build();
                           
                      //Get all invoice ids
@@ -203,12 +206,12 @@ public class HttpGetInvoices {
                                     .field("customer_name", customerNames)
                                 .endObject();
                                        
-                         //Index documents 
-                         bulk.add(new IndexRequest(InvoiceSettings.INDEX_NAME , InvoiceSettings.INDEX_TYPE, invoiceURI)
-                                .source(jsonObject.string()));
-                        bulkLength++;
-
-                        System.out.println(bulkLength +" "+ jsonObject.string());
+                         //Create index request 
+                        IndexRequest indexRequest = new IndexRequest(InvoiceSettings.INDEX_NAME , InvoiceSettings.INDEX_TYPE, invoiceURI)
+                                               .source(jsonObject.string());
+                        bulkProcessor.add(indexRequest);
+                        
+                        //System.out.println(bulkLength +" "+ jsonObject.string());
                      }
                  } 
            catch(ElasticsearchException esEx){
@@ -227,6 +230,22 @@ public class HttpGetInvoices {
            }
           
            finally {
+             httpClient.close();
+
+             if(bulkProcessor != null) {
+                 bulkProcessor.flush();
+                 bulkProcessor.close();
+             }
+             
+             if(elasticsearchClient != null){
+                 //Get a total count of indexed documents
+                 countResponse = elasticsearchClient.prepareCount(InvoiceSettings.INDEX_NAME)
+                         .setQuery(termQuery("_type", InvoiceSettings.INDEX_TYPE))
+                         .execute()
+                         .actionGet();
+                 totalDocumentsIndexed = countResponse.getCount();
+                 elasticsearchClient.close();
+             }
                
             logger.log(Level.INFO , String.format("\n==========================================="
                   + "\n\tTotal documents indexed: %s" 
@@ -234,12 +253,11 @@ public class HttpGetInvoices {
                   + "\n\tType: %s"    
                   + "\n\tTime taken: %s seconds"
                   +"\n===========================================",
-                  bulkLength,InvoiceSettings.INDEX_NAME,InvoiceSettings.INDEX_TYPE, 
+                  totalDocumentsIndexed, 
+                  InvoiceSettings.INDEX_NAME,
+                  InvoiceSettings.INDEX_TYPE, 
                  (System.currentTimeMillis()-startTime)/1000.0));
-                
-             httpClient.close();
-             if(elasticsearchClient != null) elasticsearchClient.close();
-       }    
+         }    
       }
 
          /**Get all invoice Ids **/
