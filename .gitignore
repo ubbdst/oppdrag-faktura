@@ -2,6 +2,8 @@
 run
 release
 /target/
+/.idea
+nbactions.xml
 /src/test/java/org/elasticsearch/plugin/
 pom.xml.versionsBackup
 pom.xml.releaseBackup
