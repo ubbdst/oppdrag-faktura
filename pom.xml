@@ -40,10 +40,10 @@
       <dependency>
         <groupId>org.elasticsearch</groupId>
         <artifactId>elasticsearch</artifactId>
-        <version>1.7.5</version>
-      </dependency>   
+        <version>1.7.6</version>
+      </dependency>
     </dependencies>
-    
+
     <build>
         <plugins>
             <!--Build a jar file with specified Main-Class-->
@@ -99,6 +99,6 @@
                 </execution>
             </executions>
        </plugin>
-      </plugins> 
+      </plugins>
     </build>
 </project>

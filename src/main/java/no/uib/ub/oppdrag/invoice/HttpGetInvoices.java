@@ -106,6 +106,7 @@ public class HttpGetInvoices {
 
                 //Get user inputs or fall to default settings if not provided.
                 String clusterName = System.getProperty("cluster") != null ? System.getProperty("cluster") : InvoiceSettings.CLUSTER_NAME;
+                String host = System.getProperty("host") != null ? System.getProperty("host") : InvoiceSettings.HOST_NAME;
                 String indexName = System.getProperty("index") != null ? System.getProperty("index") : InvoiceSettings.INDEX_NAME;
                 String typeName = System.getProperty("type") != null ? System.getProperty("type") : InvoiceSettings.INDEX_TYPE;
 
@@ -154,7 +155,7 @@ public class HttpGetInvoices {
                                 .put("cluster.name", clusterName).build())
                                 .addTransportAddress(
                                         //new InetSocketTransportAddress(InetAddress.getLocalHost(), 9300));
-                                        new InetSocketTransportAddress(InvoiceSettings.HOST_NAME, 9300));
+                                        new InetSocketTransportAddress(host, 9300));
 
                         ClusterHealthResponse hr = transportClient.admin().cluster().prepareHealth().get();
                         logger.log(Level.INFO, "Joining a cluster with settings: {0}", hr.toString());
